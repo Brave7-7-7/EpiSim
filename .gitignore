@@ -1,0 +1,6 @@
+﻿target/
+data/
+exports/
+sample-output/
+.vscode/
+*.db
