@@ -7,6 +7,7 @@ import com.episim.model.Lockdown;
 import com.episim.model.MaskMandate;
 import com.episim.model.Pathogen;
 import com.episim.model.VaccinationDrive;
+import com.episim.util.AppConfig;
 import com.episim.util.SimConstants;
 import com.episim.util.Theme;
 
@@ -96,6 +97,10 @@ public class ControlPanel extends JPanel {
         setLayout(new BorderLayout());
         setBackground(Theme.BACKGROUND);
         setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        AppConfig appConfig = AppConfig.load();
+        populationSpinner.setValue(clamp(appConfig.getDefaultPopulation(), 500, 20000));
+        daysSpinner.setValue(clamp(appConfig.getDefaultDays(), 30, 365));
 
         for (Pathogen pathogen : pathogens) {
             pathogenCombo.addItem(pathogen);
@@ -200,6 +205,10 @@ public class ControlPanel extends JPanel {
             }
         }
         return result;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static JComponent sectionLabel(String text) {

@@ -77,8 +77,15 @@ public class District implements Reportable {
         return occupied;
     }
 
+    /**
+     * True once every bed is taken, not only once beds run negative. SimulationEngine only ever admits
+     * a patient while occupiedBeds() &lt; hospitalCapacity (see applyHospitalisation()/admitFromQueue()),
+     * so occupiedBeds() can never structurally exceed hospitalCapacity — a strict ">" here could never
+     * fire, silently reporting the system as never overwhelmed no matter how full it actually was. ">="
+     * matches the exact condition under which a patient gets queued instead of admitted.
+     */
     public boolean isHospitalOverwhelmed() {
-        return occupiedBeds() > hospitalCapacity;
+        return occupiedBeds() >= hospitalCapacity;
     }
 
     @Override

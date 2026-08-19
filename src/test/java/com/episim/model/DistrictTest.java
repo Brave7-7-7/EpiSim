@@ -5,8 +5,39 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DistrictTest {
+
+    private Citizen hospitalisedCitizen(int id, String districtId) {
+        return new Citizen(id, "Patient-" + id, 40, districtId, HealthState.HOSPITALISED, 0, false, 0.0);
+    }
+
+    @Test
+    void isHospitalOverwhelmedIsTrueWhenEveryBedIsTakenNotOnlyWhenOverbooked() {
+        // Reproduces the exact reported scenario: PJ-URBAN scaled to 14 beds at population 2000 (see
+        // scaleHospitalCapacitiesScalesEachDistrictProportionallyToSimulatedPopulation), completely full.
+        District pjUrban = new District("PJ-URBAN", "Petaling Jaya", 3000, 1.25, 14);
+        for (int i = 0; i < 14; i++) {
+            pjUrban.addResident(hospitalisedCitizen(i, "PJ-URBAN"));
+        }
+
+        assertEquals(14, pjUrban.occupiedBeds());
+        assertTrue(pjUrban.isHospitalOverwhelmed(),
+                "A district at exactly 100% bed occupancy is overwhelmed — the next patient has nowhere to go");
+    }
+
+    @Test
+    void isHospitalOverwhelmedIsFalseOneBedBelowCapacity() {
+        District pjUrban = new District("PJ-URBAN", "Petaling Jaya", 3000, 1.25, 14);
+        for (int i = 0; i < 13; i++) {
+            pjUrban.addResident(hospitalisedCitizen(i, "PJ-URBAN"));
+        }
+
+        assertEquals(13, pjUrban.occupiedBeds());
+        assertFalse(pjUrban.isHospitalOverwhelmed());
+    }
 
     @Test
     void scaleHospitalCapacitiesScalesEachDistrictProportionallyToSimulatedPopulation() {

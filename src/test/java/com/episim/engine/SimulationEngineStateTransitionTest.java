@@ -158,6 +158,14 @@ class SimulationEngineStateTransitionTest {
         assertEquals(1, hospitalised, "Only one scaled bed is available, so only one patient should be admitted");
         assertEquals(1, stillInfected, "The second patient has nowhere to go and should remain INFECTED, queued for a bed");
         assertEquals(1, engine.getAdmissionQueueSize());
+
+        // A district that is completely full (occupied == capacity, not merely occupied > capacity)
+        // must be reflected as over-capacity in the persisted daily record — this is what
+        // OutbreakAnalyser.daysHospitalOverCapacity() and v_run_summary.days_over_capacity both count.
+        DailyRecord today = engine.getHistory().get(engine.getHistory().size() - 1);
+        assertTrue(today.isOverCapacity(),
+                "A fully occupied district (1/1 beds) must be recorded as over capacity");
+        assertEquals(1, OutbreakAnalyser.daysHospitalOverCapacity(engine.getHistory()));
     }
 
     @Test

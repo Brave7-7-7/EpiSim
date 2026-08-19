@@ -395,9 +395,9 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
                     curvePanel.setData(loaded.history(), loaded.interventions(), totalHospitalCapacity(loaded.districts()));
                     populationPanel.setPopulation(loaded.population());
                     setDistrictPanelData(loaded.districts());
-                    analysisPanel.setData(loaded.run().getRunName(), loaded.history(),
+                    analysisPanel.setData(loaded.run(), loaded.history(),
                             new ArrayList<>(loaded.districts().values()), loaded.interventions(),
-                            loaded.run().getPopulationSize());
+                            loaded.population());
 
                     dayLabel.setText("Viewing run #" + runId + " (" + loaded.run().getStatus() + ") — "
                             + loaded.history().size() + " days recorded");
@@ -427,9 +427,9 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
         switch (tabbedPane.getSelectedIndex()) {
             case 1 -> populationPanel.setPopulation(currentEngine.getPopulation());
             case 2 -> setDistrictPanelData(currentEngine.getDistricts());
-            case 3 -> analysisPanel.setData(currentEngine.getConfig().getRunName(), currentEngine.getHistory(),
+            case 3 -> analysisPanel.setData(buildRunSnapshotFromEngine(), currentEngine.getHistory(),
                     new ArrayList<>(currentEngine.getDistricts().values()), currentEngine.getInterventions(),
-                    currentEngine.getPopulation().size());
+                    currentEngine.getPopulation());
             default -> {
                 // Epidemic Curve and Run History keep themselves up to date independently.
             }
@@ -445,9 +445,23 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
         curvePanel.setData(currentEngine.getHistory(), currentEngine.getInterventions(), totalHospitalCapacity(districts));
         populationPanel.setPopulation(population);
         setDistrictPanelData(districts);
-        analysisPanel.setData(currentEngine.getConfig().getRunName(), currentEngine.getHistory(),
-                new ArrayList<>(districts.values()), currentEngine.getInterventions(), population.size());
+        analysisPanel.setData(buildRunSnapshotFromEngine(), currentEngine.getHistory(),
+                new ArrayList<>(districts.values()), currentEngine.getInterventions(), population);
         updateStatusBar();
+    }
+
+    /**
+     * A lightweight, in-memory SimulationRun snapshot for a live engine — used only to feed the
+     * Analysis tab's CSV/text exports, which need a SimulationRun-shaped record. Not a substitute for
+     * the persisted row: startedAt/completedAt are left null since this engine hasn't necessarily
+     * finished (or even started, from the DB's point of view of when it did).
+     */
+    private SimulationRun buildRunSnapshotFromEngine() {
+        SimulationConfig config = currentEngine.getConfig();
+        String status = currentEngine.isFinished() ? "COMPLETED" : "RUNNING";
+        return new SimulationRun(currentEngine.getRunId(), config.getRunName(), config.getPathogen().getId(),
+                config.getPopulationSize(), config.getTotalDays(), config.getSeedInfections(),
+                config.getRandomSeed(), null, null, status, null);
     }
 
     /**
@@ -474,7 +488,7 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
         curvePanel.setData(List.of(), List.of(), 0);
         populationPanel.setPopulation(List.of());
         setDistrictPanelData(Map.of());
-        analysisPanel.setData("", List.of(), List.of(), List.of(), 0);
+        analysisPanel.setData(null, List.of(), List.of(), List.of(), List.of());
         dayLabel.setText("Day: —");
         interventionsLabel.setText("Active interventions: —");
     }
