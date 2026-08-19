@@ -15,6 +15,7 @@ import com.episim.model.Intervention;
 import com.episim.model.Pathogen;
 import com.episim.model.Person;
 import com.episim.model.SimulationRun;
+import com.episim.util.SimConstants;
 
 import javax.swing.Timer;
 import java.sql.Connection;
@@ -44,6 +45,18 @@ public class SimulationEngine {
     private static final double OVERWHELMED_MORTALITY_PENALTY = 1.8;
     private static final double RECOVERY_IMMUNITY_LEVEL = 0.9;
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    // Assumption: districts are not hermetically sealed — commuting, shopping, family visits, etc. mean
+    // a share of each person's daily contacts are drawn from the national population rather than
+    // strictly their own district. Without this term, the four districts behave as four fully isolated
+    // epidemics: with only a handful of seed infections, it's common for one or more districts to
+    // receive zero seeds, and — since local force of infection is then permanently zero — that
+    // district's residents can never be infected at all, no matter how high R0 is or how long the run
+    // lasts. That caps the population-wide attack rate at the seeded districts' population share, well
+    // below what final-size theory predicts for R0 above 1. 15% (within the 10-20% range commuting/
+    // mixing studies typically suggest) restores a single, mostly-local-but-not-fully-isolated
+    // transmission pool.
+    private static final double CROSS_DISTRICT_MIXING_FRACTION = 0.15;
 
     private final SimulationConfig config;
     private final Pathogen pathogen;
@@ -232,6 +245,13 @@ public class SimulationEngine {
         if (districts.isEmpty()) {
             throw new IllegalStateException("Cannot start a simulation with no districts in the database");
         }
+        // district.hospital_capacity is sized against the design population (the sum of every
+        // district's population column, e.g. 10,000 across the seed data) — not against
+        // config.getPopulationSize(). Left unscaled, a small simulated population would have far more
+        // beds per capita than intended, and the hospital-overwhelmed mechanic would become practically
+        // unreachable. District.scaleHospitalCapacities() is shared with the GUI's "load historical run"
+        // flow so both paths compute the same scaled capacity.
+        District.scaleHospitalCapacities(districts.values(), config.getPopulationSize());
     }
 
     private void generatePopulation() {
@@ -260,14 +280,29 @@ public class SimulationEngine {
         Map<String, List<Person>> byDistrict = population.stream()
                 .collect(Collectors.groupingBy(Person::getDistrictId));
 
+        long nationalInfectious = population.stream().filter(p -> p.getHealthState().isInfectious()).count();
+        long nationalAlive = population.stream().filter(p -> p.getHealthState() != HealthState.DECEASED).count();
+        double nationalInfectiousProportion = nationalAlive == 0 ? 0.0 : (double) nationalInfectious / nationalAlive;
+
         Map<String, Double> lambdaByDistrict = new HashMap<>();
         for (District district : districts.values()) {
             List<Person> residents = byDistrict.getOrDefault(district.getId(), List.of());
             long infectious = residents.stream().filter(p -> p.getHealthState().isInfectious()).count();
             long alive = residents.stream().filter(p -> p.getHealthState() != HealthState.DECEASED).count();
+            double localInfectiousProportion = alive == 0 ? 0.0 : (double) infectious / alive;
+
+            double infectiousProportion = (1 - CROSS_DISTRICT_MIXING_FRACTION) * localInfectiousProportion
+                    + CROSS_DISTRICT_MIXING_FRACTION * nationalInfectiousProportion;
+
+            // pathogen.perContactTransmissionProbability() is a PER-CONTACT probability (R0 divided by
+            // infectiousDays * AVERAGE_DAILY_CONTACTS). To turn that back into a daily hazard we need:
+            // per-contact probability x contacts per day x proportion of contacts who are infectious.
+            // Without the AVERAGE_DAILY_CONTACTS factor here, lambda undershoots by exactly that factor
+            // and R-effective collapses well below 1 even when R0 is well above it.
             double lambda = alive == 0 ? 0.0
                     : pathogen.perContactTransmissionProbability()
-                            * ((double) infectious / alive)
+                            * SimConstants.AVERAGE_DAILY_CONTACTS
+                            * infectiousProportion
                             * district.getDensityFactor()
                             * transmissionModifier;
             lambdaByDistrict.put(district.getId(), lambda);
@@ -280,7 +315,11 @@ public class SimulationEngine {
         for (Person person : population) {
             if (person.getHealthState() == HealthState.SUSCEPTIBLE) {
                 double lambda = lambdaByDistrict.getOrDefault(person.getDistrictId(), 0.0);
-                double exposureProbability = lambda * person.getExposureMultiplier() * (1 - person.getImmunityLevel());
+                double hazard = lambda * person.getExposureMultiplier() * (1 - person.getImmunityLevel());
+                // 1 - e^-hazard rather than a raw multiplication: a probability can never exceed 1, and
+                // this form saturates towards 1 gracefully at high force of infection instead of needing
+                // a separate clamp.
+                double exposureProbability = 1 - Math.exp(-hazard);
                 if (random.nextDouble() < exposureProbability) {
                     person.transitionTo(HealthState.EXPOSED);
                     newInfectionsToday++;
@@ -460,6 +499,10 @@ public class SimulationEngine {
         for (SimulationListener listener : listeners) {
             listener.onSimulationFinished(finishedHistory);
         }
+    }
+
+    public SimulationConfig getConfig() {
+        return config;
     }
 
     public List<Person> getPopulation() {

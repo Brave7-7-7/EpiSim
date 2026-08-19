@@ -3,6 +3,7 @@ package com.episim.model;
 import com.episim.util.SimConstants;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,11 @@ public class District implements Reportable {
     private int population;
     private double densityFactor;
     private int hospitalCapacity;
+    // The district table's capacity is sized against a fixed design population (see schema.sql's seed
+    // data), not against whatever population a simulation run actually configures. hospitalCapacity may
+    // be rescaled in-memory for a run (see SimulationEngine); this field preserves the original DB
+    // value so that scaling is never lossy and the reference data itself is never mutated.
+    private final int designHospitalCapacity;
     private final List<Person> residents = new ArrayList<>();
 
     public District(String id, String name, int population, double densityFactor, int hospitalCapacity) {
@@ -26,10 +32,30 @@ public class District implements Reportable {
         this.population = population;
         this.densityFactor = densityFactor;
         this.hospitalCapacity = hospitalCapacity;
+        this.designHospitalCapacity = hospitalCapacity;
     }
 
     public void addResident(Person person) {
         residents.add(person);
+    }
+
+    /**
+     * Scales every district's in-memory hospitalCapacity to a simulated population, based on the ratio
+     * of simulatedPopulation to the districts' combined design population column. designHospitalCapacity
+     * (and the persisted DB row) are never touched. Shared by SimulationEngine (for a live run) and the
+     * GUI's "load historical run" flow, so both compute the scaled capacity identically rather than
+     * risking two formulas drifting apart.
+     */
+    public static void scaleHospitalCapacities(Collection<District> districts, int simulatedPopulation) {
+        int totalDesignPopulation = districts.stream().mapToInt(District::getPopulation).sum();
+        if (totalDesignPopulation <= 0) {
+            return;
+        }
+        double scaleFactor = simulatedPopulation / (double) totalDesignPopulation;
+        for (District district : districts) {
+            int scaledCapacity = Math.max(1, (int) Math.ceil(district.getDesignHospitalCapacity() * scaleFactor));
+            district.setHospitalCapacity(scaledCapacity);
+        }
     }
 
     /** Tally of residents currently in each health state. */
@@ -106,6 +132,10 @@ public class District implements Reportable {
 
     public void setHospitalCapacity(int hospitalCapacity) {
         this.hospitalCapacity = hospitalCapacity;
+    }
+
+    public int getDesignHospitalCapacity() {
+        return designHospitalCapacity;
     }
 
     public List<Person> getResidents() {

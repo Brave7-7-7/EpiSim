@@ -114,27 +114,82 @@ class SimulationEngineStateTransitionTest {
     }
 
     @Test
-    void infectedPersonIsQueuedInsteadOfAdmittedWhenNoHospitalBedsAreAvailable() throws Exception {
-        Pathogen pathogen = insertTestPathogen(1.0, 0.0); // always attempts hospitalisation
+    void secondInfectedPersonIsQueuedWhenTheOnlyScaledBedIsAlreadyOccupied() throws Exception {
+        Pathogen pathogen = insertTestPathogen(1.0, 0.0); // always attempts hospitalisation, never dies
 
+        // Collapse to a single district so a tiny population deterministically lands there in full,
+        // rather than being split unpredictably across all four seeded districts. Hospital capacity is
+        // scaled to the simulated population (see SimulationEngine.scaleHospitalCapacitiesToPopulation),
+        // and every district now gets a floor of 1 bed, so a real bed-contention scenario needs at least
+        // two patients wanting a bed in the same district on the same day, not merely a "capacity=0" hack.
         DistrictDao districtDao = new DistrictDao();
-        for (District district : districtDao.findAll()) {
-            district.setHospitalCapacity(0);
-            districtDao.update(district);
+        List<District> allDistricts = districtDao.findAll();
+        District targetDistrict = allDistricts.get(0);
+        for (District district : allDistricts) {
+            if (!district.getId().equals(targetDistrict.getId())) {
+                districtDao.delete(district.getId());
+            }
         }
 
-        // elderlyRatio=1.0 fixes severityMultiplier at 3.5, guaranteeing hospitalisationProbability >= 1.
-        SimulationEngine engine = singlePersonEngine(pathogen, 1.0, 7L);
+        SimulationConfig config = new SimulationConfig()
+                .setRunName("Overwhelmed Hospital Test")
+                .setPathogen(pathogen)
+                .setTotalDays(30)
+                .setPopulationSize(2)
+                .setSeedInfections(0)
+                .setHealthcareWorkerRatio(0.0)
+                .setElderlyRatio(1.0) // fixes severityMultiplier at 3.5, guaranteeing hospitalisationProbability >= 1
+                .setRandomSeed(7L);
+        SimulationEngine engine = new SimulationEngine(config);
+        engine.start();
 
-        Person person = engine.getPopulation().get(0);
-        person.setHealthState(HealthState.INFECTED);
-        person.setDaysInCurrentState(0);
+        List<Person> people = engine.getPopulation();
+        assertEquals(2, people.size());
+        for (Person person : people) {
+            person.setHealthState(HealthState.INFECTED);
+            person.setDaysInCurrentState(0);
+        }
 
         engine.stepOneDay();
 
-        assertEquals(HealthState.INFECTED, person.getHealthState(),
-                "No bed is available, so the person stays INFECTED rather than becoming HOSPITALISED");
+        long hospitalised = people.stream().filter(p -> p.getHealthState() == HealthState.HOSPITALISED).count();
+        long stillInfected = people.stream().filter(p -> p.getHealthState() == HealthState.INFECTED).count();
+
+        assertEquals(1, hospitalised, "Only one scaled bed is available, so only one patient should be admitted");
+        assertEquals(1, stillInfected, "The second patient has nowhere to go and should remain INFECTED, queued for a bed");
         assertEquals(1, engine.getAdmissionQueueSize());
+    }
+
+    @Test
+    void covid19LikeOutbreakProducesAMajorAttackRateWithNoInterventions() throws Exception {
+        // Uses the seeded "COVID-19 (Delta-like)" pathogen from schema.sql directly (pathogen.name is
+        // UNIQUE, so it can't be re-inserted) — R0=5.1 is well above the epidemic threshold of 1, so a
+        // run with no interventions must produce a major outbreak. This regression test would have
+        // caught the force-of-infection bug where lambda was missing the AVERAGE_DAILY_CONTACTS factor:
+        // R-effective collapsed to ~R0/contacts (~0.4), and the outbreak died out almost immediately
+        // instead of taking off.
+        Pathogen covid = new PathogenDao().findAll().stream()
+                .filter(p -> p.getName().equals("COVID-19 (Delta-like)"))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Seeded COVID-19 pathogen not found"));
+
+        SimulationConfig config = new SimulationConfig()
+                .setRunName("COVID-19 Attack Rate Regression")
+                .setPathogen(covid)
+                .setTotalDays(120)
+                .setPopulationSize(2000)
+                .setSeedInfections(3)
+                .setHealthcareWorkerRatio(0.05)
+                .setElderlyRatio(0.12)
+                .setRandomSeed(2024L);
+        SimulationEngine engine = new SimulationEngine(config);
+
+        engine.runAll();
+
+        double attackRate = OutbreakAnalyser.attackRate(engine.getHistory(), config.getPopulationSize());
+        assertTrue(attackRate > 0.5,
+                "Expected a major outbreak (attack rate > 50%) for an R0=5.1 pathogen with no interventions, "
+                        + "but got " + (attackRate * 100) + "%");
     }
 
     @Test
