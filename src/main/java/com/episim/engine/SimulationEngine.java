@@ -88,21 +88,37 @@ public class SimulationEngine {
     private volatile boolean paused;
     private Timer timer;
 
+    /** @param config the configuration this run will use; call {@link #start()} to actually begin */
     public SimulationEngine(SimulationConfig config) {
         this.config = config;
         this.pathogen = config.getPathogen();
         this.random = new Random(config.getRandomSeed());
     }
 
+    /**
+     * Registers an observer to be notified of day-by-day and end-of-run progress (observer pattern).
+     *
+     * @param listener the listener to add
+     */
     public void addListener(SimulationListener listener) {
         listeners.add(listener);
     }
 
+    /**
+     * Adds a public-health intervention to this run. Must be called before {@link #start()} — the
+     * intervention's effect is only applied on days matching {@link Intervention#isActiveOn(int)}.
+     *
+     * @param intervention the intervention to add
+     */
     public void addIntervention(Intervention intervention) {
         interventions.add(intervention);
     }
 
-    /** Loads districts, generates the population, and persists the run's opening state. */
+    /**
+     * Loads districts, generates the population, and persists the run's opening state.
+     *
+     * @throws IllegalStateException if the run has already been started
+     */
     public void start() {
         if (started) {
             throw new IllegalStateException("Simulation has already been started");
@@ -113,7 +129,12 @@ public class SimulationEngine {
         started = true;
     }
 
-    /** Advances the simulation by exactly one day, finalising the run automatically once totalDays is reached. */
+    /**
+     * Advances the simulation by exactly one day, finalising the run automatically once totalDays is reached.
+     *
+     * @return the {@link DailyRecord} produced for the day just simulated
+     * @throws IllegalStateException if {@link #start()} has not been called yet, or the run has already finished
+     */
     public DailyRecord stepOneDay() {
         if (!started) {
             throw new IllegalStateException("Call start() before stepping the simulation");
@@ -197,10 +218,12 @@ public class SimulationEngine {
         paused = false;
     }
 
+    /** Pauses day-stepping. Has no effect if the run has not started or has already finished. */
     public void pause() {
         paused = true;
     }
 
+    /** Resumes day-stepping after a {@link #pause()}. */
     public void resume() {
         paused = false;
     }
@@ -209,6 +232,8 @@ public class SimulationEngine {
      * Drives the simulation from the GUI one tick at a time via a javax.swing.Timer, whose
      * ActionListener fires on the Event Dispatch Thread — this is what lets the GUI animate a run
      * without ever calling Thread.sleep() on the EDT and freezing the interface.
+     *
+     * @param delayMillis milliseconds between simulated days; calls {@link #start()} first if not already started
      */
     public void startTimer(int delayMillis) {
         if (!started) {
@@ -227,6 +252,7 @@ public class SimulationEngine {
         timer.start();
     }
 
+    /** Stops the timer started by {@link #startTimer(int)}, if any. Safe to call even if none is running. */
     public void stopTimer() {
         if (timer != null) {
             timer.stop();
@@ -501,46 +527,57 @@ public class SimulationEngine {
         }
     }
 
+    /** @return the configuration this run was started with */
     public SimulationConfig getConfig() {
         return config;
     }
 
+    /** @return a read-only view of the live population — mutating the returned list is not supported */
     public List<Person> getPopulation() {
         return Collections.unmodifiableList(population);
     }
 
+    /** @return a read-only view of the districts, keyed by district id, with their in-run scaled hospital capacity */
     public Map<String, District> getDistricts() {
         return Collections.unmodifiableMap(districts);
     }
 
+    /** @return a read-only view of every {@link DailyRecord} produced so far */
     public List<DailyRecord> getHistory() {
         return Collections.unmodifiableList(history);
     }
 
+    /** @return a read-only view of the interventions configured for this run */
     public List<Intervention> getInterventions() {
         return Collections.unmodifiableList(interventions);
     }
 
+    /** @return the number of patients currently waiting for a hospital bed */
     public int getAdmissionQueueSize() {
         return admissionQueue.size();
     }
 
+    /** @return the current simulated day number (0 before the first {@link #stepOneDay()} call) */
     public int getCurrentDay() {
         return currentDay;
     }
 
+    /** @return the persisted {@code simulation_run.run_id} for this run, or 0 before {@link #start()} */
     public int getRunId() {
         return runId;
     }
 
+    /** @return whether {@link #start()} has been called */
     public boolean isStarted() {
         return started;
     }
 
+    /** @return whether the run has completed or been aborted */
     public boolean isFinished() {
         return finished;
     }
 
+    /** @return whether day-stepping is currently paused */
     public boolean isPaused() {
         return paused;
     }

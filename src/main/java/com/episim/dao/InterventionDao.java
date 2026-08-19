@@ -16,12 +16,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/** CRUD access to the {@code intervention} table, including polymorphic reconstruction of concrete subclasses. */
 public class InterventionDao implements Dao<Intervention> {
 
     private static final String INSERT_SQL = "INSERT INTO intervention "
             + "(run_id, intervention_type, name, start_day, end_day, intensity, cost_per_day_rm, "
             + "doses_per_day, tracing_capacity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+    /** {@inheritDoc} */
     @Override
     public void insert(Intervention intervention) throws SQLException {
         // PreparedStatement with bound parameters throughout — never string-concatenated SQL — to prevent SQL injection.
@@ -44,6 +46,10 @@ public class InterventionDao implements Dao<Intervention> {
      * used by SimulationEngine's end-of-run finalisation transaction. The intervention count per run is
      * small, so plain per-row executeUpdate() (rather than executeBatch()) is used, letting
      * getGeneratedKeys() report each row's id directly without needing a last_insert_rowid() workaround.
+     *
+     * @param interventions the interventions to insert; each has its generated id written back onto it
+     * @param conn          an open connection the caller owns; this method does not commit or close it
+     * @throws SQLException if any insert fails
      */
     public void insertBatch(List<Intervention> interventions, Connection conn) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(INSERT_SQL, Statement.RETURN_GENERATED_KEYS)) {
@@ -59,6 +65,7 @@ public class InterventionDao implements Dao<Intervention> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public Optional<Intervention> findById(int id) throws SQLException {
         String sql = "SELECT * FROM intervention WHERE intervention_id = ?";
@@ -73,6 +80,7 @@ public class InterventionDao implements Dao<Intervention> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<Intervention> findAll() throws SQLException {
         String sql = "SELECT * FROM intervention ORDER BY start_day";
@@ -89,7 +97,13 @@ public class InterventionDao implements Dao<Intervention> {
         return interventions;
     }
 
-    /** All interventions configured for one run, reconstructed as their concrete subclasses. */
+    /**
+     * All interventions configured for one run, reconstructed as their concrete subclasses.
+     *
+     * @param runId id of the run to fetch interventions for
+     * @return every intervention for that run, ordered by start day
+     * @throws SQLException if the query fails
+     */
     public List<Intervention> findByRun(int runId) throws SQLException {
         String sql = "SELECT * FROM intervention WHERE run_id = ? ORDER BY start_day";
         List<Intervention> interventions = new ArrayList<>();
@@ -107,6 +121,7 @@ public class InterventionDao implements Dao<Intervention> {
         return interventions;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(Intervention intervention) throws SQLException {
         String sql = "UPDATE intervention SET run_id = ?, intervention_type = ?, name = ?, start_day = ?, "
@@ -122,6 +137,7 @@ public class InterventionDao implements Dao<Intervention> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void delete(int id) throws SQLException {
         String sql = "DELETE FROM intervention WHERE intervention_id = ?";
@@ -134,6 +150,7 @@ public class InterventionDao implements Dao<Intervention> {
         }
     }
 
+    /** @return the {@code intervention_type} discriminator value for this intervention's concrete subclass */
     private String interventionType(Intervention intervention) {
         if (intervention instanceof Lockdown) {
             return "LOCKDOWN";
@@ -147,6 +164,7 @@ public class InterventionDao implements Dao<Intervention> {
         throw new IllegalArgumentException("Unknown intervention subclass: " + intervention.getClass());
     }
 
+    /** Binds every column, in column order, for both insert and update; subclass-only columns get {@code NULL} when not applicable. */
     private void bind(PreparedStatement ps, Intervention intervention) throws SQLException {
         ps.setInt(1, intervention.getRunId());
         ps.setString(2, interventionType(intervention));
@@ -169,9 +187,13 @@ public class InterventionDao implements Dao<Intervention> {
         }
     }
 
-    // Polymorphic reconstruction: the concrete subclass is chosen from the
-    // discriminator column, so the caller receives List<Intervention> with mixed
-    // runtime types.
+    /**
+     * Polymorphic reconstruction: the concrete subclass is chosen from the discriminator column, so the
+     * caller receives {@code List<Intervention>} with mixed runtime types.
+     *
+     * @return the {@link Lockdown}, {@link MaskMandate}, {@link VaccinationDrive}, or {@link ContactTracing}
+     *         built from the current row, per its {@code intervention_type}
+     */
     private Intervention mapRow(ResultSet rs) throws SQLException {
         int id = rs.getInt("intervention_id");
         int runId = rs.getInt("run_id");

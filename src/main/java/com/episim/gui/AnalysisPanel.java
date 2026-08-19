@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+/** The Analysis tab: every {@link OutbreakAnalyser} metric, the narrative summary, and CSV/text export/import. */
 public class AnalysisPanel extends JPanel {
 
     private final JLabel peakInfectionsValue = new JLabel("—");
@@ -58,6 +59,7 @@ public class AnalysisPanel extends JPanel {
     private Consumer<List<DailyRecord>> onCsvImported = imported -> {
     };
 
+    /** Builds the stat grid, narrative area, and export/import button bar, initially showing "no data". */
     public AnalysisPanel() {
         setLayout(new BorderLayout(12, 12));
         setBackground(Theme.BACKGROUND);
@@ -127,10 +129,25 @@ public class AnalysisPanel extends JPanel {
         return bar;
     }
 
+    /**
+     * Registers a callback fired whenever "Import CSV" successfully loads a file — lets
+     * {@code MainDashboard} update the Epidemic Curve tab with the imported data too.
+     *
+     * @param onCsvImported the callback to invoke with the newly imported daily records
+     */
     public void setOnCsvImported(Consumer<List<DailyRecord>> onCsvImported) {
         this.onCsvImported = onCsvImported;
     }
 
+    /**
+     * Replaces the displayed dataset and refreshes every stat card and the narrative summary.
+     *
+     * @param run           the run being displayed, or {@code null} to show "no data"
+     * @param history       the run's day-by-day history
+     * @param districts     the run's districts, used for the text-report export
+     * @param interventions the interventions deployed during the run
+     * @param population    the run's population, used for the population CSV export and attack-rate calculation
+     */
     public void setData(SimulationRun run, List<DailyRecord> history, List<District> districts,
                          List<Intervention> interventions, List<Person> population) {
         this.run = run;

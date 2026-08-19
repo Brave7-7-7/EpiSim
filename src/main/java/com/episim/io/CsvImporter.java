@@ -25,6 +25,12 @@ public final class CsvImporter {
     private CsvImporter() {
     }
 
+    /**
+     * @param file a CSV file previously written by {@link CsvExporter#exportDailyRecords}
+     * @return the parsed daily records, in file order
+     * @throws IOException if the file cannot be read, its header does not match, or any row fails to
+     *                      parse — the message names the exact file and line number
+     */
     public static List<DailyRecord> importDailyRecords(Path file) throws IOException {
         List<DailyRecord> records = new ArrayList<>();
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
@@ -53,6 +59,7 @@ public final class CsvImporter {
         return records;
     }
 
+    /** Parses one CSV row into a {@link DailyRecord} (id/runId are not part of the CSV, so both are 0). */
     private static DailyRecord parseRecord(String line) {
         String[] parts = line.split(",", -1);
         if (parts.length != EXPECTED_COLUMN_COUNT) {

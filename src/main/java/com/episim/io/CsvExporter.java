@@ -24,6 +24,11 @@ public final class CsvExporter {
     private CsvExporter() {
     }
 
+    /**
+     * @param records the run's day-by-day history, in the order to write them
+     * @param file    the destination CSV file, overwritten if it already exists
+     * @throws ReportIoException if the file cannot be written
+     */
     public static void exportDailyRecords(List<DailyRecord> records, Path file) {
         try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
             writeLine(writer, "day,susceptible,exposed,infected,hospitalised,recovered,deceased,"
@@ -40,6 +45,11 @@ public final class CsvExporter {
         }
     }
 
+    /**
+     * @param people the population to write, including its polymorphic role label
+     * @param file   the destination CSV file, overwritten if it already exists
+     * @throws ReportIoException if the file cannot be written
+     */
     public static void exportPopulation(List<Person> people, Path file) {
         try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
             writeLine(writer, "id,name,age,role,district_id,health_state,days_in_state,vaccinated,immunity_level");
@@ -57,6 +67,15 @@ public final class CsvExporter {
         }
     }
 
+    /**
+     * Writes the run's metadata as a {@code field,value} table, followed by a blank line and one row
+     * per intervention with its computed total cost.
+     *
+     * @param run           the run to summarise
+     * @param interventions the interventions deployed during the run
+     * @param file          the destination CSV file, overwritten if it already exists
+     * @throws ReportIoException if the file cannot be written
+     */
     public static void exportRunSummary(SimulationRun run, List<Intervention> interventions, Path file) {
         try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
             writeLine(writer, "field,value");
@@ -83,15 +102,18 @@ public final class CsvExporter {
         }
     }
 
+    /** Writes one {@code key,value} row, quoting the value if needed. */
     private static void writeField(BufferedWriter writer, String key, String value) throws IOException {
         writeLine(writer, key + "," + quote(value));
     }
 
+    /** Writes a line followed by the platform line separator. */
     private static void writeLine(BufferedWriter writer, String line) throws IOException {
         writer.write(line);
         writer.newLine();
     }
 
+    /** RFC-4180 quoting: wraps in double quotes (doubling any internal quotes) only if needed. */
     private static String quote(String value) {
         if (value == null) {
             return "";

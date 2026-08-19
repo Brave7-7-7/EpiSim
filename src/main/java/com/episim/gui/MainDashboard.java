@@ -21,6 +21,9 @@ import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
@@ -67,12 +70,14 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
     private SwingWorker<Void, Void> playbackWorker;
     private boolean viewingHistoricalRun;
 
+    /** @param pathogens the pathogens to offer in the picker, typically loaded from {@code PathogenDao} at startup */
     public MainDashboard(List<Pathogen> pathogens) {
         super("EpiSim");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1280, 800);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
+        setJMenuBar(buildMenuBar());
 
         // Width comes from ControlPanel's internal scroll pane, not from a preferredSize set here —
         // see ControlPanel's constructor.
@@ -94,6 +99,34 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
         add(buildStatusBar(), BorderLayout.SOUTH);
 
         historyPanel.refresh();
+    }
+
+    private JMenuBar buildMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        JMenu helpMenu = new JMenu("Help");
+        JMenuItem aboutItem = new JMenuItem("About EpiSim");
+        aboutItem.addActionListener(e -> showAboutDialog());
+        helpMenu.add(aboutItem);
+        menuBar.add(helpMenu);
+        return menuBar;
+    }
+
+    private void showAboutDialog() {
+        String message = "<html><body style='width: 320px'>"
+                + "<h2 style='margin-bottom:0'>EpiSim</h2>"
+                + "<p style='margin-top:2px'>Epidemic Outbreak Simulation &amp; Public Health Response System</p>"
+                + "<p><b>Group Members:</b><br/>"
+                + "Jasurbek Omonkulov<br/>"
+                + "Tursunmurodov Salokhiddinbek<br/>"
+                + "Zaynutdinov Kmaronbek</p>"
+                + "<p><b>Course:</b> BIT1123 Object Oriented Programming (Java)</p>"
+                + "<p><b>Aligned to UN Sustainable Development Goal 3</b><br/>"
+                + "Good Health and Well-being<br/>"
+                + "&#8226; Target 3.3 — End epidemics of AIDS, tuberculosis, malaria, and other communicable diseases<br/>"
+                + "&#8226; Target 3.d — Strengthen capacity for early warning, risk reduction, and management "
+                + "of national and global health risks</p>"
+                + "</body></html>";
+        JOptionPane.showMessageDialog(this, message, "About EpiSim", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private JComponent buildTitleBar() {
@@ -149,6 +182,7 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
 
     // ---------- ControlPanel.Listener ----------
 
+    /** {@inheritDoc} Resumes a paused run in place, or creates and starts a new engine via a {@link SwingWorker}. */
     @Override
     public void onStartRequested(SimulationConfig config, List<Intervention> interventions) {
         if (currentEngine != null) {
@@ -185,6 +219,7 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
         starter.execute();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void onPauseRequested() {
         if (currentEngine != null) {
@@ -193,6 +228,7 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
         controlPanel.setRunState(ControlPanel.RunState.PAUSED);
     }
 
+    /** {@inheritDoc} Creates and starts a new engine if none exists yet, otherwise pauses and steps the existing one. */
     @Override
     public void onStepRequested(SimulationConfig config, List<Intervention> interventions) {
         if (currentEngine == null) {
@@ -241,6 +277,7 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
         stepper.execute();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void onResetRequested() {
         SimulationEngine engineToReset = currentEngine;
@@ -265,6 +302,7 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
         worker.execute();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void onAbortRequested() {
         if (currentEngine == null) {
@@ -329,6 +367,7 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
 
     // ---------- SimulationListener (observer pattern; fires on the background worker thread) ----------
 
+    /** {@inheritDoc} */
     @Override
     public void onDayCompleted(DailyRecord record) {
         javax.swing.SwingUtilities.invokeLater(() -> {
@@ -341,6 +380,7 @@ public class MainDashboard extends JFrame implements SimulationListener, Control
         });
     }
 
+    /** {@inheritDoc} */
     @Override
     public void onSimulationFinished(List<DailyRecord> history) {
         javax.swing.SwingUtilities.invokeLater(() -> {

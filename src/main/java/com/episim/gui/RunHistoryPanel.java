@@ -42,6 +42,7 @@ public class RunHistoryPanel extends JPanel {
     private IntConsumer onLoadRunRequested = runId -> {
     };
 
+    /** Builds the run table, detail pane, and button bar. Call {@link #refresh()} to load data. */
     public RunHistoryPanel() {
         setLayout(new BorderLayout(10, 10));
         setBackground(Theme.BACKGROUND);
@@ -76,10 +77,16 @@ public class RunHistoryPanel extends JPanel {
         add(buttonBar, BorderLayout.SOUTH);
     }
 
+    /**
+     * Registers the callback fired when the user clicks "Load Selected Run".
+     *
+     * @param callback invoked with the selected run's id
+     */
     public void setOnLoadRunRequested(IntConsumer callback) {
         this.onLoadRunRequested = callback;
     }
 
+    /** Reloads the run table from {@code v_run_summary} via a {@link SwingWorker}, off the Event Dispatch Thread. */
     public void refresh() {
         SwingWorker<List<RunSummary>, Void> worker = new SwingWorker<>() {
             @Override

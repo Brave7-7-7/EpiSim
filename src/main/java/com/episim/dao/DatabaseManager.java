@@ -53,6 +53,11 @@ public final class DatabaseManager {
      * Opens a fresh connection and enables foreign-key enforcement on it —
      * SQLite disables FK enforcement by default on every new connection, so
      * this pragma is mandatory on each call, not a one-time setup step.
+     *
+     * @return a new, open connection with {@code PRAGMA foreign_keys = ON} already applied
+     * @throws DataAccessException if the connection cannot be opened — the message explains the likely
+     *                             cause (file locked by another program, missing/unwritable directory,
+     *                             etc.) rather than exposing a raw driver stack trace
      */
     public static Connection getConnection() {
         try {
@@ -63,10 +68,41 @@ public final class DatabaseManager {
             lastOpenedConnection = connection;
             return connection;
         } catch (SQLException e) {
-            throw new DataAccessException("Unable to open database connection at " + dbUrl, e);
+            throw new DataAccessException(describeConnectionFailure(e), e);
         }
     }
 
+    /**
+     * Turns a raw {@link SQLException} from opening the database into a message a non-technical user can
+     * act on, rather than a JDBC stack trace. SQLite's own exception text already distinguishes these
+     * cases reasonably well (e.g. "database is locked"), so this only adds the likely cause and a
+     * suggested next step on top of it.
+     */
+    private static String describeConnectionFailure(SQLException e) {
+        String detail = e.getMessage() == null ? "" : e.getMessage().toLowerCase(java.util.Locale.ROOT);
+        String path = Path.of("data/episim.db").toAbsolutePath().toString();
+
+        if (detail.contains("locked") || detail.contains("busy")) {
+            return "The database file appears to be locked:\n" + path
+                    + "\n\nThis usually means it's already open in another program — for example, a "
+                    + "second copy of EpiSim, or a SQLite browser tool. Close that program and try again.";
+        }
+        if (detail.contains("unable to open database file") || detail.contains("no such file or directory")) {
+            return "The database file could not be opened:\n" + path
+                    + "\n\nCheck that the 'data' folder exists and that this program has permission to "
+                    + "read and write there.";
+        }
+        return "Could not open the database at:\n" + path + "\n\nDetails: " + e.getMessage();
+    }
+
+    /**
+     * Creates the {@code data} directory (if the database is file-backed), executes {@code schema.sql}
+     * against it, and seeds reference data if the pathogen table is empty. Safe to call on every launch
+     * — every statement is idempotent ({@code CREATE ... IF NOT EXISTS}, {@code INSERT OR IGNORE}).
+     *
+     * @throws DataAccessException if the schema cannot be read, the database cannot be opened, or the
+     *                             schema fails to execute
+     */
     public static void initialise() {
         boolean fileBacked = !dbUrl.contains(":memory:");
         if (fileBacked) {
@@ -93,7 +129,11 @@ public final class DatabaseManager {
         seedIfEmpty();
     }
 
-    /** Guards against a blank database: seeds reference data only if pathogen is empty. */
+    /**
+     * Guards against a blank database: seeds reference data only if pathogen is empty.
+     *
+     * @throws DataAccessException if the count query or the seed inserts fail
+     */
     public static void seedIfEmpty() {
         try (Connection connection = getConnection()) {
             int count = 0;
@@ -114,6 +154,10 @@ public final class DatabaseManager {
         }
     }
 
+    /**
+     * @return {@code true} if SQLite's {@code PRAGMA integrity_check} reports {@code ok}
+     * @throws DataAccessException if the check itself could not be run
+     */
     public static boolean isHealthy() {
         try (Connection connection = getConnection();
              Statement statement = connection.createStatement();
@@ -124,6 +168,13 @@ public final class DatabaseManager {
         }
     }
 
+    /**
+     * Closes any connection this manager is tracking (the most recently opened one, and/or the
+     * in-memory test keep-alive connection) and, if the latter was open, resets the URL back to the
+     * real {@code data/episim.db} file.
+     *
+     * @throws DataAccessException if closing a tracked connection fails
+     */
     public static void close() {
         if (lastOpenedConnection != null) {
             try {
@@ -148,6 +199,7 @@ public final class DatabaseManager {
         }
     }
 
+    /** Reads {@code /schema.sql} off the classpath in full, as UTF-8 text. */
     private static String readSchemaResource() {
         try (InputStream in = DatabaseManager.class.getResourceAsStream("/schema.sql")) {
             if (in == null) {

@@ -15,16 +15,25 @@ public final class OutbreakAnalyser {
     private OutbreakAnalyser() {
     }
 
-    // Peak prevalence uses infected + hospitalised, not infected alone: those are exactly the two
-    // states HealthState.isInfectious() counts as infectious, and the same two states
-    // SimulationEngine.computeForceOfInfectionByDistrict() counts when it derives each district's
-    // force of infection. Keeping this definition aligned with the engine matters — otherwise the
-    // "peak" reported here could describe a different population than the one that actually drove
-    // transmission during the run.
+    /**
+     * Peak prevalence uses infected + hospitalised, not infected alone: those are exactly the two
+     * states HealthState.isInfectious() counts as infectious, and the same two states
+     * SimulationEngine.computeForceOfInfectionByDistrict() counts when it derives each district's
+     * force of infection. Keeping this definition aligned with the engine matters — otherwise the
+     * "peak" reported here could describe a different population than the one that actually drove
+     * transmission during the run.
+     *
+     * @param history the run's day-by-day history
+     * @return the highest infected+hospitalised headcount reached, or 0 for an empty history
+     */
     public static int peakInfections(List<DailyRecord> history) {
         return history.stream().mapToInt(r -> r.getInfected() + r.getHospitalised()).max().orElse(0);
     }
 
+    /**
+     * @param history the run's day-by-day history
+     * @return the first day number on which {@link #peakInfections(List)} was reached, or 0 for an empty history
+     */
     public static int peakDay(List<DailyRecord> history) {
         int peak = peakInfections(history);
         return history.stream()
@@ -38,6 +47,10 @@ public final class OutbreakAnalyser {
      * Cumulative incidence: the proportion of the population that was ever infected over the course of
      * the run. Sums newInfections rather than reading any point-in-time state column, so someone who
      * has since recovered or died is still counted.
+     *
+     * @param history        the run's day-by-day history
+     * @param populationSize the run's total population size
+     * @return the fraction ever infected, in [0.0, 1.0]; 0.0 if populationSize is not positive
      */
     public static double attackRate(List<DailyRecord> history, int populationSize) {
         if (populationSize <= 0) {
@@ -47,7 +60,12 @@ public final class OutbreakAnalyser {
         return (double) totalInfections / populationSize;
     }
 
-    /** Deaths as a proportion of everyone who was ever infected (cumulative cases, guarding divide-by-zero). */
+    /**
+     * Deaths as a proportion of everyone who was ever infected (cumulative cases, guarding divide-by-zero).
+     *
+     * @param history the run's day-by-day history
+     * @return finalDeceased / cumulativeInfections, or 0.0 if the history is empty or had no infections
+     */
     public static double caseFatalityRate(List<DailyRecord> history) {
         if (history.isEmpty()) {
             return 0.0;
@@ -60,15 +78,26 @@ public final class OutbreakAnalyser {
         return (double) finalDeceased / totalInfections;
     }
 
+    /**
+     * @param history the run's day-by-day history
+     * @return the count of days on which any district was overwhelmed
+     */
     public static long daysHospitalOverCapacity(List<DailyRecord> history) {
         return history.stream().filter(DailyRecord::isOverCapacity).count();
     }
 
-    /** Highest simultaneous hospital bed occupancy reached during the run — the health-system-capacity metric for SDG Target 3.d. */
+    /**
+     * @param history the run's day-by-day history
+     * @return the highest simultaneous hospital bed occupancy reached — the health-system-capacity metric for SDG Target 3.d
+     */
     public static int peakHospitalOccupancy(List<DailyRecord> history) {
         return history.stream().mapToInt(DailyRecord::getBedsOccupied).max().orElse(0);
     }
 
+    /**
+     * @param interventions the interventions deployed during the run
+     * @return the sum of every intervention's {@link Intervention#totalCost()}
+     */
     public static double totalInterventionCost(List<Intervention> interventions) {
         return interventions.stream().mapToDouble(Intervention::totalCost).sum();
     }
@@ -77,6 +106,12 @@ public final class OutbreakAnalyser {
      * A short plain-English public-health interpretation of the run. This text is intended for report
      * exports as well as on-screen display, so — like other persisted/exported output — it is formatted
      * with SimConstants.DATA_LOCALE rather than the machine's default locale.
+     *
+     * @param history        the run's day-by-day history
+     * @param interventions  the interventions deployed during the run
+     * @param populationSize the run's total population size
+     * @return four to six sentences summarising peak infections, attack rate, case fatality rate,
+     *         hospital capacity, and intervention cost
      */
     public static String generateNarrativeSummary(List<DailyRecord> history, List<Intervention> interventions,
                                                     int populationSize) {

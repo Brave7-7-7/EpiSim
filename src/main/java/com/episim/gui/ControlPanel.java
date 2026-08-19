@@ -21,6 +21,7 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
@@ -33,11 +34,14 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.awt.Rectangle;
+import java.text.ParseException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.function.BiConsumer;
 
 /**
  * Left-hand configuration and playback controls. Building an Intervention here means constructing the
@@ -46,17 +50,31 @@ import java.util.Locale;
  */
 public class ControlPanel extends JPanel {
 
+    /** Playback state, driving which buttons and config fields are enabled — see {@link #setRunState}. */
     public enum RunState { NOT_STARTED, RUNNING, PAUSED, FINISHED }
 
+    /** Callback interface the owning dashboard implements to react to button clicks (observer pattern). */
     public interface Listener {
+
+        /**
+         * @param config        the validated configuration to start a new run with
+         * @param interventions the validated, enabled interventions to attach to the new run
+         */
         void onStartRequested(SimulationConfig config, List<Intervention> interventions);
 
+        /** Fired when the user clicks "Pause". */
         void onPauseRequested();
 
+        /**
+         * @param config        the validated configuration to use if a run must be created first
+         * @param interventions the validated, enabled interventions to use if a run must be created first
+         */
         void onStepRequested(SimulationConfig config, List<Intervention> interventions);
 
+        /** Fired when the user clicks "Reset". */
         void onResetRequested();
 
+        /** Fired when the user clicks "Abort". */
         void onAbortRequested();
     }
 
@@ -93,6 +111,10 @@ public class ControlPanel extends JPanel {
 
     private final List<InterventionRow> interventionRows = new ArrayList<>();
 
+    /**
+     * @param pathogens the pathogens to offer in the picker, typically loaded from {@code PathogenDao} at startup
+     * @param listener  callback for Start/Pause/Step/Reset/Abort button clicks
+     */
     public ControlPanel(List<Pathogen> pathogens, Listener listener) {
         setLayout(new BorderLayout());
         setBackground(Theme.BACKGROUND);
@@ -154,15 +176,21 @@ public class ControlPanel extends JPanel {
         scrollPane.setPreferredSize(new Dimension(CONTROL_PANEL_WIDTH + scrollbarWidth, 0));
         add(scrollPane, BorderLayout.CENTER);
 
-        startButton.addActionListener(e -> listener.onStartRequested(buildConfig(), buildInterventions()));
+        startButton.addActionListener(e -> validateAndSubmit(listener::onStartRequested));
         pauseButton.addActionListener(e -> listener.onPauseRequested());
-        stepButton.addActionListener(e -> listener.onStepRequested(buildConfig(), buildInterventions()));
+        stepButton.addActionListener(e -> validateAndSubmit(listener::onStepRequested));
         resetButton.addActionListener(e -> listener.onResetRequested());
         abortButton.addActionListener(e -> listener.onAbortRequested());
 
         setRunState(RunState.NOT_STARTED);
     }
 
+    /**
+     * Updates which buttons and config fields are enabled to match the given state, and toggles the
+     * Start button's label between "Start" and "Resume".
+     *
+     * @param state the new playback state
+     */
     public void setRunState(RunState state) {
         boolean configEditable = state == RunState.NOT_STARTED;
         pathogenCombo.setEnabled(configEditable);
@@ -182,29 +210,83 @@ public class ControlPanel extends JPanel {
         resetButton.setEnabled(state != RunState.NOT_STARTED);
     }
 
-    private SimulationConfig buildConfig() {
-        Pathogen pathogen = (Pathogen) pathogenCombo.getSelectedItem();
-        String runName = pathogen.getName() + " — " + LocalDateTime.now().format(RUN_NAME_TIMESTAMP);
-        return new SimulationConfig()
-                .setRunName(runName)
-                .setPathogen(pathogen)
-                .setPopulationSize((Integer) populationSpinner.getValue())
-                .setTotalDays((Integer) daysSpinner.getValue())
-                .setSeedInfections((Integer) seedInfectionsSpinner.getValue())
-                .setHealthcareWorkerRatio(HEALTHCARE_WORKER_RATIO)
-                .setElderlyRatio(ELDERLY_RATIO)
-                .setRandomSeed(((Integer) randomSeedSpinner.getValue()).longValue());
+    /**
+     * Commits every spinner's pending text, validates the result, and — only if everything is valid —
+     * invokes {@code action} with the built config and interventions. Shows a JOptionPane and aborts
+     * without invoking {@code action} on the first validation failure found.
+     */
+    private void validateAndSubmit(BiConsumer<SimulationConfig, List<Intervention>> action) {
+        Optional<SimulationConfig> config = validateAndBuildConfig();
+        if (config.isEmpty()) {
+            return;
+        }
+        Optional<List<Intervention>> interventions = validateAndBuildInterventions();
+        if (interventions.isEmpty()) {
+            return;
+        }
+        action.accept(config.get(), interventions.get());
     }
 
-    private List<Intervention> buildInterventions() {
+    private Optional<SimulationConfig> validateAndBuildConfig() {
+        if (!commitEdit(populationSpinner, "Population size") || !commitEdit(daysSpinner, "Simulation days")
+                || !commitEdit(seedInfectionsSpinner, "Seed infections") || !commitEdit(randomSeedSpinner, "Random seed")) {
+            return Optional.empty();
+        }
+
+        int populationSize = (Integer) populationSpinner.getValue();
+        int seedInfections = (Integer) seedInfectionsSpinner.getValue();
+        if (seedInfections > populationSize) {
+            showValidationError("Seed infections (" + seedInfections + ") cannot exceed the population size ("
+                    + populationSize + ").");
+            return Optional.empty();
+        }
+
+        Pathogen pathogen = (Pathogen) pathogenCombo.getSelectedItem();
+        String runName = pathogen.getName() + " — " + LocalDateTime.now().format(RUN_NAME_TIMESTAMP);
+        return Optional.of(new SimulationConfig()
+                .setRunName(runName)
+                .setPathogen(pathogen)
+                .setPopulationSize(populationSize)
+                .setTotalDays((Integer) daysSpinner.getValue())
+                .setSeedInfections(seedInfections)
+                .setHealthcareWorkerRatio(HEALTHCARE_WORKER_RATIO)
+                .setElderlyRatio(ELDERLY_RATIO)
+                .setRandomSeed(((Integer) randomSeedSpinner.getValue()).longValue()));
+    }
+
+    private Optional<List<Intervention>> validateAndBuildInterventions() {
         List<Intervention> result = new ArrayList<>();
         for (InterventionRow row : interventionRows) {
-            Intervention intervention = row.build();
-            if (intervention != null) {
-                result.add(intervention);
+            if (!row.isEnabled()) {
+                continue;
             }
+            if (!row.commitPendingEdits()) {
+                showValidationError(row.getTitle() + ": every field must be a whole number.");
+                return Optional.empty();
+            }
+            if (row.getEndDay() < row.getStartDay()) {
+                showValidationError(row.getTitle() + ": end day (" + row.getEndDay()
+                        + ") cannot be before start day (" + row.getStartDay() + ").");
+                return Optional.empty();
+            }
+            result.add(row.build());
         }
-        return result;
+        return Optional.of(result);
+    }
+
+    /** Forces a spinner's pending (possibly unparsed) text into its model now, rather than leaving stale data in place. */
+    private boolean commitEdit(JSpinner spinner, String fieldLabel) {
+        try {
+            spinner.commitEdit();
+            return true;
+        } catch (ParseException e) {
+            showValidationError(fieldLabel + " must be a whole number.");
+            return false;
+        }
+    }
+
+    private void showValidationError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Invalid Input", JOptionPane.WARNING_MESSAGE);
     }
 
     private static int clamp(int value, int min, int max) {
@@ -317,6 +399,7 @@ public class ControlPanel extends JPanel {
     private static class InterventionRow {
 
         private final String type;
+        private final String title;
         private final double costPerDay;
         private final JCheckBox enabledCheck = new JCheckBox("Enable");
         private final JSlider intensitySlider = new JSlider(0, 100, 50);
@@ -328,6 +411,7 @@ public class ControlPanel extends JPanel {
         InterventionRow(String type, String title, double costPerDay, int defaultEndDay,
                          String extraLabel, int extraDefault, int extraMax) {
             this.type = type;
+            this.title = title;
             this.costPerDay = costPerDay;
             this.startDaySpinner = new JSpinner(new SpinnerNumberModel(1, 1, 3650, 1));
             this.endDaySpinner = new JSpinner(new SpinnerNumberModel(Math.max(1, defaultEndDay), 1, 3650, 1));
@@ -399,13 +483,51 @@ public class ControlPanel extends JPanel {
             }
         }
 
-        /** Constructs the correct concrete Intervention subclass, or null if this row is not enabled. */
+        boolean isEnabled() {
+            return enabledCheck.isSelected();
+        }
+
+        String getTitle() {
+            return title;
+        }
+
+        int getStartDay() {
+            return (Integer) startDaySpinner.getValue();
+        }
+
+        int getEndDay() {
+            return (Integer) endDaySpinner.getValue();
+        }
+
+        /**
+         * Forces any pending (possibly unparsed) text in this row's spinners into their models now.
+         *
+         * @return {@code false} if any field's text does not parse as a whole number
+         */
+        boolean commitPendingEdits() {
+            try {
+                startDaySpinner.commitEdit();
+                endDaySpinner.commitEdit();
+                if (extraSpinner != null) {
+                    extraSpinner.commitEdit();
+                }
+                return true;
+            } catch (ParseException e) {
+                return false;
+            }
+        }
+
+        /**
+         * Constructs the correct concrete Intervention subclass, or null if this row is not enabled.
+         * Assumes {@link #commitPendingEdits()} has already been called and end day &gt;= start day has
+         * already been validated by the caller — this method does not re-check either.
+         */
         Intervention build() {
             if (!enabledCheck.isSelected()) {
                 return null;
             }
-            int start = (Integer) startDaySpinner.getValue();
-            int end = Math.max(start, (Integer) endDaySpinner.getValue());
+            int start = getStartDay();
+            int end = getEndDay();
             double intensity = intensitySlider.getValue() / 100.0;
 
             return switch (type) {

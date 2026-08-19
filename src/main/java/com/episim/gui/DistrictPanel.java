@@ -24,6 +24,7 @@ public class DistrictPanel extends JPanel {
 
     private final JPanel cardContainer = new JPanel(new GridLayout(0, 2, 16, 16));
 
+    /** Builds an empty card grid — call {@link #setDistricts} to populate it. */
     public DistrictPanel() {
         setLayout(new BorderLayout());
         setBackground(Theme.BACKGROUND);
@@ -32,6 +33,11 @@ public class DistrictPanel extends JPanel {
         add(new JScrollPane(cardContainer), BorderLayout.CENTER);
     }
 
+    /**
+     * Rebuilds the card grid, one card per district, alphabetically by district id.
+     *
+     * @param districts the districts to display, keyed by district id
+     */
     public void setDistricts(Map<String, District> districts) {
         cardContainer.removeAll();
         for (District district : new TreeMap<>(districts).values()) {

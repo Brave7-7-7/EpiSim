@@ -40,10 +40,19 @@ public class EpidemicCurvePanel extends JPanel {
     private List<Intervention> interventions = List.of();
     private int hospitalCapacity;
 
+    /** Builds an empty chart — call {@link #setData} to populate it. */
     public EpidemicCurvePanel() {
         setBackground(Theme.SURFACE);
     }
 
+    /**
+     * Replaces the chart's data and repaints. Never calls {@code paintComponent()} directly — Swing
+     * requires all drawing to happen inside that method, triggered by the platform's paint cycle.
+     *
+     * @param history          the run's day-by-day history to plot
+     * @param interventions    interventions to shade the background for, on the days they were active
+     * @param hospitalCapacity total hospital capacity, drawn as a dashed reference line (0 to omit it)
+     */
     public void setData(List<DailyRecord> history, List<Intervention> interventions, int hospitalCapacity) {
         this.history = history;
         this.interventions = interventions;

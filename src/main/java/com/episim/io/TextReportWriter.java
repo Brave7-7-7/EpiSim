@@ -24,6 +24,14 @@ public final class TextReportWriter {
     private TextReportWriter() {
     }
 
+    /**
+     * @param file      the destination text file, overwritten if it already exists
+     * @param run       the run being reported on
+     * @param items     the report body, one line per item — typically a mix of {@code District} and
+     *                  {@code DailyRecord} objects, printed via their shared {@link Reportable} interface
+     * @param narrative the plain-English summary paragraph, word-wrapped to the report's fixed width
+     * @throws ReportIoException if the file cannot be written
+     */
     public static void writeReport(Path file, SimulationRun run, List<Reportable> items, String narrative) {
         StringBuilder report = new StringBuilder();
 

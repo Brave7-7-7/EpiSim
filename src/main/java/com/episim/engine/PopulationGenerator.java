@@ -50,11 +50,19 @@ public class PopulationGenerator {
     private final List<District> districts;
     private final Random random;
 
+    /**
+     * @param districts  the districts to distribute the population across, weighted by their population column
+     * @param randomSeed seed for reproducible generation — the same seed always produces the same population
+     */
     public PopulationGenerator(List<District> districts, long randomSeed) {
         this.districts = districts;
         this.random = new Random(randomSeed);
     }
 
+    /**
+     * @param config the run's configuration — population size, role ratios, seed infection count, and pathogen
+     * @return a freshly generated population, a polymorphic mix of the three {@link Person} subclasses
+     */
     public List<Person> generate(SimulationConfig config) {
         List<Person> people = new ArrayList<>(config.getPopulationSize());
         int totalDistrictPopulation = districts.stream().mapToInt(District::getPopulation).sum();

@@ -11,12 +11,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/** CRUD access to the {@code daily_record} table, plus batch/transactional insert for a whole run's history. */
 public class DailyRecordDao implements Dao<DailyRecord> {
 
     private static final String INSERT_SQL = "INSERT INTO daily_record "
             + "(run_id, day_number, susceptible, exposed, infected, hospitalised, recovered, deceased, "
             + "new_infections, effective_r, beds_occupied, over_capacity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+    /** {@inheritDoc} */
     @Override
     public void insert(DailyRecord record) throws SQLException {
         // PreparedStatement with bound parameters throughout — never string-concatenated SQL — to prevent SQL injection.
@@ -35,7 +37,12 @@ public class DailyRecordDao implements Dao<DailyRecord> {
         }
     }
 
-    /** Bulk-inserts a run's daily records inside their own single-use transaction — far faster than one-by-one inserts. */
+    /**
+     * Bulk-inserts a run's daily records inside their own single-use transaction — far faster than one-by-one inserts.
+     *
+     * @param records the records to insert; each has its generated id written back onto it
+     * @throws DataAccessException if the transaction cannot be opened, committed, or must be rolled back
+     */
     public void insertBatch(List<DailyRecord> records) {
         Connection conn = null;
         try {
@@ -66,6 +73,10 @@ public class DailyRecordDao implements Dao<DailyRecord> {
      * Same batch insert, but running on a connection the caller owns and will commit/rollback itself —
      * used by SimulationEngine's end-of-run finalisation, which must flush the last records, update
      * persons, insert interventions, and mark the run COMPLETED all inside one transaction.
+     *
+     * @param records the records to insert; each has its generated id written back onto it
+     * @param conn    an open connection the caller owns; this method does not commit or close it
+     * @throws SQLException if the batch insert fails
      */
     public void insertBatch(List<DailyRecord> records, Connection conn) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(INSERT_SQL)) {
@@ -94,6 +105,7 @@ public class DailyRecordDao implements Dao<DailyRecord> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public Optional<DailyRecord> findById(int id) throws SQLException {
         String sql = "SELECT * FROM daily_record WHERE record_id = ?";
@@ -108,6 +120,7 @@ public class DailyRecordDao implements Dao<DailyRecord> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<DailyRecord> findAll() throws SQLException {
         String sql = "SELECT * FROM daily_record ORDER BY run_id, day_number";
@@ -124,7 +137,13 @@ public class DailyRecordDao implements Dao<DailyRecord> {
         return records;
     }
 
-    /** All daily records for one run, ordered by day — the series the charts plot. */
+    /**
+     * All daily records for one run, ordered by day — the series the charts plot.
+     *
+     * @param runId id of the run to fetch records for
+     * @return every daily record for that run, ordered by day number
+     * @throws SQLException if the query fails
+     */
     public List<DailyRecord> findByRun(int runId) throws SQLException {
         String sql = "SELECT * FROM daily_record WHERE run_id = ? ORDER BY day_number";
         List<DailyRecord> records = new ArrayList<>();
@@ -142,6 +161,7 @@ public class DailyRecordDao implements Dao<DailyRecord> {
         return records;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(DailyRecord record) throws SQLException {
         String sql = "UPDATE daily_record SET run_id = ?, day_number = ?, susceptible = ?, exposed = ?, "
@@ -157,6 +177,7 @@ public class DailyRecordDao implements Dao<DailyRecord> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void delete(int id) throws SQLException {
         String sql = "DELETE FROM daily_record WHERE record_id = ?";
@@ -169,6 +190,7 @@ public class DailyRecordDao implements Dao<DailyRecord> {
         }
     }
 
+    /** Binds every column except the primary key, in column order, for insert/insertBatch and update. */
     private void bind(PreparedStatement ps, DailyRecord record) throws SQLException {
         ps.setInt(1, record.getRunId());
         ps.setInt(2, record.getDayNumber());
@@ -184,6 +206,7 @@ public class DailyRecordDao implements Dao<DailyRecord> {
         ps.setInt(12, record.isOverCapacity() ? 1 : 0);
     }
 
+    /** Builds a {@link DailyRecord} from the current row of a {@code daily_record} query. */
     private DailyRecord mapRow(ResultSet rs) throws SQLException {
         return new DailyRecord(
                 rs.getInt("record_id"),

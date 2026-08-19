@@ -16,12 +16,14 @@ import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.util.List;
 
+/** The Population tab: a filterable, state-coloured table of every person in the current run. */
 public class PopulationTablePanel extends JPanel {
 
     private final PersonTableModel tableModel = new PersonTableModel();
     private final JComboBox<String> stateFilterCombo = new JComboBox<>();
     private final JTextField searchField = new JTextField(16);
 
+    /** Builds the filter bar and the underlying table, initially empty — call {@link #setPopulation} to populate it. */
     public PopulationTablePanel() {
         setLayout(new BorderLayout());
         setBackground(Theme.BACKGROUND);
@@ -49,6 +51,11 @@ public class PopulationTablePanel extends JPanel {
         add(new JScrollPane(table), BorderLayout.CENTER);
     }
 
+    /**
+     * Replaces the displayed population and re-applies the current state/search filter.
+     *
+     * @param population the new population to display
+     */
     public void setPopulation(List<Person> population) {
         tableModel.setPeople(population);
         applyFilter();

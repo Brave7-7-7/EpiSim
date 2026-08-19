@@ -21,12 +21,22 @@ public class PersonTableModel extends AbstractTableModel {
     private List<Person> allPeople = new ArrayList<>();
     private List<Person> visiblePeople = new ArrayList<>();
 
+    /**
+     * Replaces the full (unfiltered) dataset and clears any active filter.
+     *
+     * @param people the new population to display
+     */
     public void setPeople(List<Person> people) {
         this.allPeople = new ArrayList<>(people);
         applyFilter(null, "");
     }
 
-    /** Recomputes the visible rows: stateFilter (null = all states) AND a case-insensitive name search. */
+    /**
+     * Recomputes the visible rows: stateFilter (null = all states) AND a case-insensitive name search.
+     *
+     * @param stateFilter only show people in this state, or {@code null} to show every state
+     * @param nameSearch  only show people whose name contains this text (case-insensitive), or blank for no filter
+     */
     public void applyFilter(HealthState stateFilter, String nameSearch) {
         String needle = nameSearch == null ? "" : nameSearch.trim().toLowerCase(Locale.ROOT);
         visiblePeople = new ArrayList<>();
@@ -40,25 +50,33 @@ public class PersonTableModel extends AbstractTableModel {
         fireTableDataChanged();
     }
 
+    /**
+     * @param row the visible (post-filter) row index, as shown in the table
+     * @return the {@link Person} backing that row
+     */
     public Person getPersonAt(int row) {
         return visiblePeople.get(row);
     }
 
+    /** {@inheritDoc} */
     @Override
     public int getRowCount() {
         return visiblePeople.size();
     }
 
+    /** {@inheritDoc} */
     @Override
     public int getColumnCount() {
         return COLUMNS.length;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String getColumnName(int column) {
         return COLUMNS[column];
     }
 
+    /** {@inheritDoc} */
     @Override
     public Class<?> getColumnClass(int columnIndex) {
         return switch (columnIndex) {
@@ -69,6 +87,7 @@ public class PersonTableModel extends AbstractTableModel {
         };
     }
 
+    /** {@inheritDoc} Column 3 (Role) is resolved polymorphically via {@link Person#getRoleLabel()}. */
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
         Person person = visiblePeople.get(rowIndex);

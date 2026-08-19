@@ -10,6 +10,7 @@ import java.awt.Component;
 /** Colours the State column cell using the Color carried on each HealthState constant. */
 public class HealthStateCellRenderer extends DefaultTableCellRenderer {
 
+    /** {@inheritDoc} Sets the cell's background to {@link HealthState#getColor()} and picks readable text on top of it. */
     @Override
     public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
                                                      boolean hasFocus, int row, int column) {
@@ -24,6 +25,7 @@ public class HealthStateCellRenderer extends DefaultTableCellRenderer {
         return component;
     }
 
+    /** @return black or white, whichever gives better contrast against the given background */
     private Color readableTextColorFor(Color background) {
         double luminance = (0.299 * background.getRed() + 0.587 * background.getGreen() + 0.114 * background.getBlue()) / 255.0;
         return luminance > 0.55 ? Color.BLACK : Color.WHITE;

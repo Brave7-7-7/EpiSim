@@ -18,12 +18,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/** CRUD access to the {@code person} table, including polymorphic reconstruction of concrete subclasses. */
 public class PersonDao implements Dao<Person> {
 
     private static final String INSERT_SQL = "INSERT INTO person "
             + "(run_id, full_name, age, person_type, district_id, health_state, days_in_state, vaccinated, "
             + "immunity_level, has_ppe, hospital_assigned, care_home_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+    /** {@inheritDoc} {@code run_id} is left {@code NULL} — see the field comment above for why. */
     @Override
     public void insert(Person person) throws SQLException {
         // PreparedStatement with bound parameters throughout — never string-concatenated SQL — to prevent SQL injection.
@@ -43,7 +45,13 @@ public class PersonDao implements Dao<Person> {
         }
     }
 
-    /** Bulk-inserts a run's population inside a single transaction — far faster than 5000 individual inserts. */
+    /**
+     * Bulk-inserts a run's population inside a single transaction — far faster than 5000 individual inserts.
+     *
+     * @param people the population to insert; each has its generated id written back onto it
+     * @param runId  id of the simulation run every person is attached to
+     * @throws DataAccessException if the transaction cannot be opened, committed, or must be rolled back
+     */
     public void insertBatch(List<Person> people, int runId) {
         Connection conn = null;
         try {
@@ -92,6 +100,7 @@ public class PersonDao implements Dao<Person> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public Optional<Person> findById(int id) throws SQLException {
         String sql = "SELECT * FROM person WHERE person_id = ?";
@@ -106,6 +115,7 @@ public class PersonDao implements Dao<Person> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public List<Person> findAll() throws SQLException {
         String sql = "SELECT * FROM person ORDER BY person_id";
@@ -122,6 +132,11 @@ public class PersonDao implements Dao<Person> {
         return people;
     }
 
+    /**
+     * @param runId id of the run to fetch the population for
+     * @return every person attached to that run, ordered by id
+     * @throws SQLException if the query fails
+     */
     public List<Person> findByRun(int runId) throws SQLException {
         String sql = "SELECT * FROM person WHERE run_id = ? ORDER BY person_id";
         List<Person> people = new ArrayList<>();
@@ -139,6 +154,7 @@ public class PersonDao implements Dao<Person> {
         return people;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(Person person) throws SQLException {
         String sql = "UPDATE person SET full_name = ?, age = ?, person_type = ?, district_id = ?, "
@@ -162,6 +178,7 @@ public class PersonDao implements Dao<Person> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void delete(int id) throws SQLException {
         String sql = "DELETE FROM person WHERE person_id = ?";
@@ -177,6 +194,10 @@ public class PersonDao implements Dao<Person> {
     /**
      * Batch-writes each person's final health_state/days_in_state on a connection the caller owns and
      * will commit/rollback itself — used by SimulationEngine's end-of-run finalisation transaction.
+     *
+     * @param people the population whose current in-memory state should be written back
+     * @param conn   an open connection the caller owns; this method does not commit or close it
+     * @throws SQLException if the batch update fails
      */
     public void updateHealthStates(List<Person> people, Connection conn) throws SQLException {
         String sql = "UPDATE person SET health_state = ?, days_in_state = ? WHERE person_id = ?";
@@ -191,7 +212,13 @@ public class PersonDao implements Dao<Person> {
         }
     }
 
-    /** Breakdown of headcount by person_type then health_state, for the run report screen. */
+    /**
+     * Breakdown of headcount by person_type then health_state, for the run report screen.
+     *
+     * @param runId id of the run to summarise
+     * @return a map from person_type to a map from health state to headcount
+     * @throws SQLException if the query fails
+     */
     public Map<String, Map<HealthState, Integer>> countByStateAndType(int runId) throws SQLException {
         String sql = "SELECT person_type, health_state, COUNT(*) AS cnt FROM person "
                 + "WHERE run_id = ? GROUP BY person_type, health_state";
@@ -213,6 +240,7 @@ public class PersonDao implements Dao<Person> {
         return result;
     }
 
+    /** @return the {@code person_type} discriminator value for this person's concrete subclass */
     private String personType(Person person) {
         if (person instanceof HealthcareWorker) {
             return "HEALTHCARE_WORKER";
@@ -222,6 +250,7 @@ public class PersonDao implements Dao<Person> {
         return "CITIZEN";
     }
 
+    /** Binds every column, in column order, for both {@link #insert} and {@link #insertBatch}; {@code runId} of {@code null} binds SQL NULL. */
     private void bind(PreparedStatement ps, Person person, Integer runId) throws SQLException {
         if (runId != null) {
             ps.setInt(1, runId);
@@ -239,6 +268,7 @@ public class PersonDao implements Dao<Person> {
         bindSubtypeColumns(ps, person, 10, 11, 12);
     }
 
+    /** Binds the three subclass-only columns, setting {@code NULL} for whichever don't apply to this person's role. */
     private void bindSubtypeColumns(PreparedStatement ps, Person person, int ppeCol, int hospitalCol,
                                      int careHomeCol) throws SQLException {
         if (person instanceof HealthcareWorker hw) {
@@ -256,9 +286,13 @@ public class PersonDao implements Dao<Person> {
         }
     }
 
-    // Polymorphic reconstruction: the concrete subclass is chosen from the
-    // discriminator column, so the caller receives List<Person> with mixed
-    // runtime types.
+    /**
+     * Polymorphic reconstruction: the concrete subclass is chosen from the discriminator column, so the
+     * caller receives {@code List<Person>} with mixed runtime types.
+     *
+     * @return the {@link Citizen}, {@link HealthcareWorker}, or {@link ElderlyResident} built from the
+     *         current row, per its {@code person_type}
+     */
     private Person mapRow(ResultSet rs) throws SQLException {
         int id = rs.getInt("person_id");
         String fullName = rs.getString("full_name");

@@ -12,8 +12,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/** CRUD access to the {@code simulation_run} table, plus the run-history query the GUI needs. */
 public class SimulationRunDao implements Dao<SimulationRun> {
 
+    /**
+     * {@inheritDoc} {@code started_at} is left to the table's own default
+     * ({@code datetime('now','localtime')}), so it is not bound here.
+     */
     @Override
     public void insert(SimulationRun run) throws SQLException {
         // PreparedStatement with bound parameters throughout — never string-concatenated SQL — to prevent SQL injection.
@@ -42,6 +47,7 @@ public class SimulationRunDao implements Dao<SimulationRun> {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public Optional<SimulationRun> findById(int id) throws SQLException {
         String sql = "SELECT * FROM simulation_run WHERE run_id = ?";
@@ -56,6 +62,7 @@ public class SimulationRunDao implements Dao<SimulationRun> {
         }
     }
 
+    /** {@inheritDoc} Ordered most-recently-started first. */
     @Override
     public List<SimulationRun> findAll() throws SQLException {
         String sql = "SELECT * FROM simulation_run ORDER BY started_at DESC";
@@ -72,6 +79,7 @@ public class SimulationRunDao implements Dao<SimulationRun> {
         return runs;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(SimulationRun run) throws SQLException {
         String sql = "UPDATE simulation_run SET run_name = ?, pathogen_id = ?, population_size = ?, "
@@ -95,6 +103,7 @@ public class SimulationRunDao implements Dao<SimulationRun> {
         }
     }
 
+    /** {@inheritDoc} Cascades (via {@code ON DELETE CASCADE}) to the run's persons, daily records, interventions, and events. */
     @Override
     public void delete(int id) throws SQLException {
         String sql = "DELETE FROM simulation_run WHERE run_id = ?";
@@ -111,6 +120,12 @@ public class SimulationRunDao implements Dao<SimulationRun> {
      * Sets status (and, when the run has ended, completed_at) on a connection the caller owns and will
      * commit/rollback itself — used by SimulationEngine's end-of-run finalisation transaction, and to
      * mark an aborted run without deleting its row.
+     *
+     * @param runId       id of the run to update
+     * @param status      {@code RUNNING}, {@code COMPLETED}, or {@code ABORTED}
+     * @param completedAt the completion timestamp, or {@code null} if still running
+     * @param conn        an open connection the caller owns; this method does not commit or close it
+     * @throws SQLException if the update fails
      */
     public void updateStatus(int runId, String status, String completedAt, Connection conn) throws SQLException {
         String sql = "UPDATE simulation_run SET status = ?, completed_at = ? WHERE run_id = ?";
@@ -122,7 +137,12 @@ public class SimulationRunDao implements Dao<SimulationRun> {
         }
     }
 
-    /** Reads the v_run_summary view for the Analysis tab's run list. */
+    /**
+     * Reads the v_run_summary view for the Analysis tab's run list.
+     *
+     * @return every run's summary row, most recently created first
+     * @throws SQLException if the query fails
+     */
     public List<RunSummary> findAllSummaries() throws SQLException {
         String sql = "SELECT * FROM v_run_summary ORDER BY run_id DESC";
         List<RunSummary> summaries = new ArrayList<>();
@@ -149,6 +169,7 @@ public class SimulationRunDao implements Dao<SimulationRun> {
         return summaries;
     }
 
+    /** Builds a {@link SimulationRun} from the current row of a {@code simulation_run} query. */
     private SimulationRun mapRow(ResultSet rs) throws SQLException {
         return new SimulationRun(
                 rs.getInt("run_id"),

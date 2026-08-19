@@ -18,6 +18,12 @@ import java.util.Optional;
  */
 public class DistrictDao {
 
+    /**
+     * Inserts a new row into {@code district}.
+     *
+     * @param district the district to insert (its {@code id} is the primary key, supplied by the caller)
+     * @throws SQLException if the insert fails
+     */
     public void insert(District district) throws SQLException {
         // PreparedStatement with bound parameters throughout — never string-concatenated SQL — to prevent SQL injection.
         String sql = "INSERT INTO district (district_id, name, population, density_factor, hospital_capacity) "
@@ -31,6 +37,11 @@ public class DistrictDao {
         }
     }
 
+    /**
+     * @param id the district's natural key, e.g. {@code "KL-CENTRAL"}
+     * @return the matching district, or {@link Optional#empty()} if no row has that id
+     * @throws SQLException if the query fails
+     */
     public Optional<District> findById(String id) throws SQLException {
         String sql = "SELECT * FROM district WHERE district_id = ?";
         try (Connection conn = DatabaseManager.getConnection();
@@ -44,6 +55,10 @@ public class DistrictDao {
         }
     }
 
+    /**
+     * @return every district, ordered alphabetically by name
+     * @throws SQLException if the query fails
+     */
     public List<District> findAll() throws SQLException {
         String sql = "SELECT * FROM district ORDER BY name";
         List<District> districts = new ArrayList<>();
@@ -59,6 +74,12 @@ public class DistrictDao {
         return districts;
     }
 
+    /**
+     * Updates the row matching {@code district}'s id with its current field values.
+     *
+     * @param district the district to update
+     * @throws SQLException if the update fails
+     */
     public void update(District district) throws SQLException {
         String sql = "UPDATE district SET name = ?, population = ?, density_factor = ?, hospital_capacity = ? "
                 + "WHERE district_id = ?";
@@ -75,6 +96,10 @@ public class DistrictDao {
         }
     }
 
+    /**
+     * @param id the natural key of the row to delete
+     * @throws SQLException if the delete fails
+     */
     public void delete(String id) throws SQLException {
         String sql = "DELETE FROM district WHERE district_id = ?";
         try (Connection conn = DatabaseManager.getConnection();
@@ -86,6 +111,7 @@ public class DistrictDao {
         }
     }
 
+    /** Binds every column, in column order, for insert. */
     private void bind(PreparedStatement ps, District district) throws SQLException {
         ps.setString(1, district.getId());
         ps.setString(2, district.getName());
@@ -94,6 +120,7 @@ public class DistrictDao {
         ps.setInt(5, district.getHospitalCapacity());
     }
 
+    /** Builds a {@link District} from the current row of a {@code district} query. */
     private District mapRow(ResultSet rs) throws SQLException {
         return new District(
                 rs.getString("district_id"),

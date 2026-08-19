@@ -15,6 +15,15 @@ import java.util.List;
  */
 public class EventLogDao {
 
+    /**
+     * Appends one event row. Failures throw {@link DataAccessException} (unchecked) rather than a
+     * checked exception, since a logging call is never expected to be handled specially by its caller.
+     *
+     * @param runId       id of the run this event belongs to
+     * @param day         simulated day the event occurred on
+     * @param type        short category, e.g. {@code "HOSPITAL_OVERWHELMED"}
+     * @param description human-readable detail
+     */
     public void log(int runId, int day, String type, String description) {
         // PreparedStatement with bound parameters throughout — never string-concatenated SQL — to prevent SQL injection.
         String sql = "INSERT INTO event_log (run_id, day_number, event_type, description) VALUES (?, ?, ?, ?)";
@@ -30,7 +39,14 @@ public class EventLogDao {
         }
     }
 
-    /** Most recent event_log entries for a run, newest first — feeds the Run History detail pane. */
+    /**
+     * Most recent event_log entries for a run, newest first — feeds the Run History detail pane.
+     *
+     * @param runId id of the run to fetch events for
+     * @param limit maximum number of entries to return
+     * @return up to {@code limit} entries, newest first
+     * @throws SQLException if the query fails
+     */
     public List<EventLogEntry> findByRun(int runId, int limit) throws SQLException {
         String sql = "SELECT day_number, event_type, description, logged_at FROM event_log "
                 + "WHERE run_id = ? ORDER BY log_id DESC LIMIT ?";

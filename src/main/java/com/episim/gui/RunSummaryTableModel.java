@@ -16,30 +16,39 @@ public class RunSummaryTableModel extends AbstractTableModel {
 
     private List<RunSummary> summaries = new ArrayList<>();
 
+    /** @param summaries the full replacement set of run summaries to display */
     public void setSummaries(List<RunSummary> summaries) {
         this.summaries = new ArrayList<>(summaries);
         fireTableDataChanged();
     }
 
+    /**
+     * @param row the table row index
+     * @return the {@link RunSummary} backing that row
+     */
     public RunSummary getSummaryAt(int row) {
         return summaries.get(row);
     }
 
+    /** {@inheritDoc} */
     @Override
     public int getRowCount() {
         return summaries.size();
     }
 
+    /** {@inheritDoc} */
     @Override
     public int getColumnCount() {
         return COLUMNS.length;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String getColumnName(int column) {
         return COLUMNS[column];
     }
 
+    /** {@inheritDoc} */
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
         RunSummary summary = summaries.get(rowIndex);

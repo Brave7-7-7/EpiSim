@@ -23,14 +23,17 @@ public enum HealthState {
         this.color = color;
     }
 
+    /** @return the human-readable display label, e.g. "Hospitalised" */
     public String getLabel() {
         return label;
     }
 
+    /** @return the colour this state is drawn in on every chart and the Districts tab */
     public Color getColor() {
         return color;
     }
 
+    /** @return {@code true} for {@link #INFECTED} and {@link #HOSPITALISED} — the states that drive transmission */
     public boolean isInfectious() {
         return this == INFECTED || this == HOSPITALISED;
     }

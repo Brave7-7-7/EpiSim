@@ -26,6 +26,13 @@ public class District implements Reportable {
     private final int designHospitalCapacity;
     private final List<Person> residents = new ArrayList<>();
 
+    /**
+     * @param id               natural key, e.g. {@code "KL-CENTRAL"}
+     * @param name             display name
+     * @param population       design population (the basis for weighted population generation)
+     * @param densityFactor    multiplier applied to transmission risk within this district
+     * @param hospitalCapacity design bed count; also becomes the initial {@link #getDesignHospitalCapacity()}
+     */
     public District(String id, String name, int population, double densityFactor, int hospitalCapacity) {
         this.id = id;
         this.name = name;
@@ -35,6 +42,7 @@ public class District implements Reportable {
         this.designHospitalCapacity = hospitalCapacity;
     }
 
+    /** @param person the person to add to this district's resident roster */
     public void addResident(Person person) {
         residents.add(person);
     }
@@ -45,6 +53,9 @@ public class District implements Reportable {
      * (and the persisted DB row) are never touched. Shared by SimulationEngine (for a live run) and the
      * GUI's "load historical run" flow, so both compute the scaled capacity identically rather than
      * risking two formulas drifting apart.
+     *
+     * @param districts          the districts to rescale in place
+     * @param simulatedPopulation the population size actually being simulated
      */
     public static void scaleHospitalCapacities(Collection<District> districts, int simulatedPopulation) {
         int totalDesignPopulation = districts.stream().mapToInt(District::getPopulation).sum();
@@ -58,7 +69,7 @@ public class District implements Reportable {
         }
     }
 
-    /** Tally of residents currently in each health state. */
+    /** @return a tally of residents currently in each health state */
     public Map<HealthState, Integer> stateBreakdown() {
         Map<HealthState, Integer> breakdown = new HashMap<>();
         for (Person person : residents) {
@@ -67,6 +78,7 @@ public class District implements Reportable {
         return breakdown;
     }
 
+    /** @return the count of residents currently {@code HOSPITALISED} */
     public int occupiedBeds() {
         int occupied = 0;
         for (Person person : residents) {
@@ -88,11 +100,13 @@ public class District implements Reportable {
         return occupiedBeds() >= hospitalCapacity;
     }
 
+    /** @return the report section title for this district */
     @Override
     public String getReportTitle() {
         return "District Report: " + name;
     }
 
+    /** @return a single formatted line summarising this district's population, beds, and overwhelm status */
     @Override
     public String toReportLine() {
         // This line is written to plain-text report exports, so it must use SimConstants.DATA_LOCALE
@@ -101,50 +115,62 @@ public class District implements Reportable {
                 name, id, population, occupiedBeds(), hospitalCapacity, isHospitalOverwhelmed());
     }
 
+    /** @return the natural key, e.g. {@code "KL-CENTRAL"} */
     public String getId() {
         return id;
     }
 
+    /** @param id the new natural key */
     public void setId(String id) {
         this.id = id;
     }
 
+    /** @return the display name */
     public String getName() {
         return name;
     }
 
+    /** @param name the new display name */
     public void setName(String name) {
         this.name = name;
     }
 
+    /** @return the design population (the basis for weighted population generation) */
     public int getPopulation() {
         return population;
     }
 
+    /** @param population the new design population */
     public void setPopulation(int population) {
         this.population = population;
     }
 
+    /** @return the multiplier applied to transmission risk within this district */
     public double getDensityFactor() {
         return densityFactor;
     }
 
+    /** @param densityFactor the new density multiplier */
     public void setDensityFactor(double densityFactor) {
         this.densityFactor = densityFactor;
     }
 
+    /** @return the current effective bed count — may be rescaled from {@link #getDesignHospitalCapacity()} for a run */
     public int getHospitalCapacity() {
         return hospitalCapacity;
     }
 
+    /** @param hospitalCapacity the new effective bed count */
     public void setHospitalCapacity(int hospitalCapacity) {
         this.hospitalCapacity = hospitalCapacity;
     }
 
+    /** @return the original, unscaled design bed count from the reference data */
     public int getDesignHospitalCapacity() {
         return designHospitalCapacity;
     }
 
+    /** @return the live, mutable list of residents assigned to this district */
     public List<Person> getResidents() {
         return residents;
     }
